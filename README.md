@@ -91,32 +91,6 @@ Instruction Fetch
 * RISC-V ISA
 * Computer Architecture Concepts
 
-## Project Structure
-
-```text
-RISCV-Single-Cycle-Processor/
-│
-├── README.md
-├── Report.pdf
-├── Verilog_Code/
-│   ├── program_counter.v
-│   ├── instruction_memory.v
-│   ├── register_file.v
-│   ├── control_unit.v
-│   ├── alu.v
-│   ├── immediate_generator.v
-│   ├── data_memory.v
-│   └── riscv_top.v
-│
-├── Simulation/
-│   ├── waveform.png
-│   └── testbench.v
-│
-└── Images/
-    ├── processor_block_diagram.png
-    └── architecture.png
-```
-
 ## Simulation Results
 
 Simulation verifies:
