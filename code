@@ -1,0 +1,242 @@
+module program_counter(input clk,input rst,input [31:0] pc_in,output reg [31:0] pc_out);
+always @(posedge clk or posedge rst)
+begin
+if(rst)
+pc_out<=32'b0;
+else
+pc_out<=pc_in;
+end
+endmodule
+
+
+module pc_adder(input [31:0] pc_in,output [31:0] pc_next);
+assign pc_next = pc_in + 4;
+endmodule
+
+
+module pc_mux(input [31:0] pc_in,input [31:0] pc_branch,input pc_select,output [31:0] pc_out);
+assign pc_out = (pc_select) ? pc_branch : pc_in;
+endmodule
+
+
+module Instruction_Memory(input rst,input clk,input [31:0] read_address,output [31:0] instruction_out);
+reg [31:0] I_Mem [0:255];
+integer k;
+
+assign instruction_out = I_Mem[read_address[9:2]];
+always @(posedge clk or posedge rst) begin
+if(rst)
+begin
+for(k=0;k<256;k=k+1)
+I_Mem[k] = 32'b0;
+end
+else
+begin
+I_Mem[0]=32'b00000000000000000000000000000000;
+I_Mem[1]=32'b0000000_11001_10000_000_01101_0110011;
+I_Mem[2]=32'b0100000_00011_01000_000_00101_0110011;
+I_Mem[3]=32'b0000000_00011_00010_111_00001_0110011;
+I_Mem[4]=32'b0000000_00101_00011_110_00100_0110011;
+I_Mem[5]=32'b0000000_00101_00011_100_00100_0110011;
+I_Mem[6]=32'b0000000_00101_00011_001_00100_0110011;
+I_Mem[7]=32'b0000000_00101_00011_101_00100_0110011;
+end
+end
+endmodule
+
+
+module Register_File(
+input clk,
+input rst,
+input RegWrite,
+input [4:0] Rs1,
+input [4:0] Rs2,
+input [4:0] Rd,
+input [31:0] Write_data,
+output [31:0] read_data1,
+output [31:0] read_data2
+);
+
+reg [31:0] Registers [0:31];
+integer k;
+always @(posedge clk or posedge rst) begin
+if(rst)
+begin
+for(k=0;k<32;k=k+1)
+Registers[k]=32'b0;
+end
+else if(RegWrite && Rd!=0)
+Registers[Rd]=Write_data;
+end
+
+assign read_data1 = Registers[Rs1];
+assign read_data2 = Registers[Rs2];
+endmodule
+
+
+module main_control_unit(
+input [6:0] opcode,
+output reg RegWrite,
+output reg MemRead,
+output reg MemWrite,
+output reg MemToReg,
+output reg ALUSrc,
+output reg Branch,
+output reg [1:0] ALUOp
+);
+
+always @(*) begin
+case(opcode)
+
+7'b0110011: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b0,1'b0,1'b1,1'b0,1'b0,1'b0,2'b10};
+7'b0010011: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b1,1'b0,1'b1,1'b0,1'b0,1'b0,2'b10};
+7'b0000011: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b1,1'b1,1'b1,1'b1,1'b0,1'b0,2'b00};
+7'b0100011: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b1,1'b0,1'b0,1'b0,1'b1,1'b0,2'b00};
+7'b1100011: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b1,2'b11};
+default: {ALUSrc,MemToReg,RegWrite,MemRead,MemWrite,Branch,ALUOp} = {1'b0,1'b0,1'b0,1'b0,1'b0,1'b0,2'b00};
+endcase
+end
+endmodule
+
+
+module immediate_generator(input [31:0] instruction,output reg [31:0] imm_out);
+always @(*) begin
+case(instruction[6:0])
+7'b0010011: imm_out = {{20{instruction[31]}},instruction[31:20]};
+7'b0000011: imm_out = {{20{instruction[31]}},instruction[31:20]};
+7'b0100011: imm_out = {{20{instruction[31]}},instruction[31:25],instruction[11:7]};
+7'b1100011: imm_out = {{19{instruction[31]}},instruction[31],instruction[7],instruction[30:25],instruction[11:8],1'b0};
+default: imm_out = 32'b0;
+endcase
+end
+endmodule
+
+
+module ALU(
+input [31:0] A,
+input [31:0] B,
+input [3:0] ALUcontrol_In,
+output reg [31:0] Result,
+output Zero
+);
+
+always @(*) begin
+case(ALUcontrol_In)
+4'b0000: Result = A + B;
+4'b0001: Result = A - B;
+4'b0010: Result = A & B;
+4'b0011: Result = A | B;
+4'b0100: Result = A ^ B;
+default: Result = 32'b0;
+endcase
+end
+assign Zero = (Result == 32'b0);
+endmodule
+
+
+module ALU_Control(
+input [2:0] funct3,
+input [6:0] funct7,
+input [1:0] ALUOp,
+output reg [3:0] ALUcontrol_Out
+);
+
+always @(*) begin
+case({ALUOp,funct7,funct3})
+12'b10_0000000_000: ALUcontrol_Out = 4'b0000;
+12'b10_0100000_000: ALUcontrol_Out = 4'b0001;
+12'b10_0000000_111: ALUcontrol_Out = 4'b0010;
+12'b10_0000000_110: ALUcontrol_Out = 4'b0011;
+default: ALUcontrol_Out = 4'b0000;
+endcase
+end
+endmodule
+
+
+module MUX2to1(
+input [31:0] input0,
+input [31:0] input1,
+input select,
+output [31:0] out
+);
+
+assign out = (select) ? input1 : input0;
+endmodule
+
+
+module Data_Memory(
+input clk,
+input rst,
+input MemRead,
+input MemWrite,
+input [31:0] address,
+input [31:0] write_data,
+output [31:0] read_data
+);
+reg [31:0] D_Memory [0:255];
+integer k;
+
+assign read_data = (MemRead) ? D_Memory[address[9:2]] : 32'b0;
+always @(posedge clk or posedge rst)
+begin
+if(rst)
+begin
+for(k=0;k<256;k=k+1)
+D_Memory[k]=32'b0;
+end
+else if(MemWrite)
+D_Memory[address[9:2]] = write_data;
+end
+endmodule
+
+
+module Branch_Adder(
+input [31:0] PC,
+input [31:0] offset,
+output [31:0] branch_target
+);
+assign branch_target = PC + offset;
+endmodule
+
+
+module RISCV_Top(input clk,input rst);
+
+wire [31:0] pc_out_wire;
+wire [31:0] pc_next_wire;
+wire [31:0] pc_wire;
+wire [31:0] decode_wire;
+wire [31:0] read_data1;
+wire [31:0] regtomux;
+wire [31:0] WB_wire;
+wire [31:0] branch_target;
+wire [31:0] immgen_wire;
+wire [31:0] muxtoAlu;
+wire [31:0] read_data_wire;
+wire [31:0] WB_data_wire;
+
+wire RegWrite;
+wire ALUSrc;
+wire MemRead;
+wire MemWrite;
+wire MemToReg;
+wire Branch;
+wire Zero;
+
+wire [1:0] ALUOp_wire;
+wire [3:0] ALUcontrol_wire;
+
+program_counter PC(clk,rst,pc_wire,pc_out_wire);
+pc_adder PC_Adder(pc_out_wire,pc_next_wire);
+pc_mux pc_mux_i(pc_next_wire,branch_target,Branch&Zero,pc_wire);
+Instruction_Memory Instr_Mem(rst,clk,pc_out_wire,decode_wire);
+Register_File Reg_File(clk,rst,RegWrite,decode_wire[19:15],decode_wire[24:20],decode_wire[11:7],WB_data_wire,read_data1,regtomux);
+main_control_unit Control_Unit(decode_wire[6:0],RegWrite,MemRead,MemWrite,MemToReg,ALUSrc,Branch,ALUOp_wire);
+ALU_Control ALU_Control_i(decode_wire[14:12],decode_wire[31:25],ALUOp_wire,ALUcontrol_wire);
+ALU ALU_i(read_data1,muxtoAlu,ALUcontrol_wire,WB_wire,Zero);
+immediate_generator Imm_Gen(decode_wire,immgen_wire);
+MUX2to1 Imm_Mux(regtomux,immgen_wire,ALUSrc,muxtoAlu);
+Data_Memory Data_Mem(clk,rst,MemRead,MemWrite,WB_wire,regtomux,read_data_wire);
+MUX2to1 WB_Mux(WB_wire,read_data_wire,MemToReg,WB_data_wire);
+Branch_Adder Branch_Adder_i(pc_out_wire,immgen_wire,branch_target);
+
+endmodule
